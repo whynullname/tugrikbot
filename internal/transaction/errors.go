@@ -1,0 +1,7 @@
+package transaction
+
+import "errors"
+
+var ErrAmountIsZero = errors.New("amount is zero")
+var ErrInvalidCategory = errors.New("invalid category")
+var ErrInternalWhileCreateTransaction = errors.New("internal error while create transaction")
