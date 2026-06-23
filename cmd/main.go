@@ -9,6 +9,7 @@ import (
 	"github.com/whynullname/tugrikbot/internal/config"
 	"github.com/whynullname/tugrikbot/internal/logger"
 	"github.com/whynullname/tugrikbot/internal/telegram"
+	"github.com/whynullname/tugrikbot/internal/transaction"
 )
 
 func main() {
@@ -24,7 +25,9 @@ func main() {
 		return
 	}
 
-	bot, err := telegram.NewBot(cfg.BotToken)
+	inMemoryRepo := transaction.NewInMemoryRepository()
+	transactionUseCase := transaction.NewUseCase(inMemoryRepo)
+	bot, err := telegram.NewBot(cfg.BotToken, transactionUseCase)
 	if err != nil {
 		logger.Instance.Errorf("error in initialize bot: %v\n", err)
 		return
