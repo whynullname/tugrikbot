@@ -8,6 +8,7 @@ import (
 
 	"github.com/whynullname/tugrikbot/internal/config"
 	"github.com/whynullname/tugrikbot/internal/logger"
+	"github.com/whynullname/tugrikbot/internal/postgres"
 	"github.com/whynullname/tugrikbot/internal/telegram"
 	"github.com/whynullname/tugrikbot/internal/transaction"
 )
@@ -25,8 +26,15 @@ func main() {
 		return
 	}
 
-	inMemoryRepo := transaction.NewInMemoryRepository()
-	transactionUseCase := transaction.NewUseCase(inMemoryRepo)
+	pgDB, err := postgres.New(context.Background(), cfg.DBDSN)
+	if err != nil {
+		logger.Instance.Errorf("error connect to postgres: %v\n", err)
+		return
+	}
+	defer pgDB.Close()
+
+	postgresRepo := transaction.NewPostgresRepository(pgDB)
+	transactionUseCase := transaction.NewUseCase(postgresRepo)
 	bot, err := telegram.NewBot(cfg.BotToken, transactionUseCase)
 	if err != nil {
 		logger.Instance.Errorf("error in initialize bot: %v\n", err)

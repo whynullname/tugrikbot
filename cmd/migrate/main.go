@@ -7,11 +7,13 @@ import (
 	"os"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/joho/godotenv"
 	"github.com/pressly/goose/v3"
 	"github.com/whynullname/tugrikbot/migrations"
 )
 
 func main() {
+	_ = godotenv.Load()
 	dsn := os.Getenv("TUGRIK_DB_DSN")
 
 	if dsn == "" {
