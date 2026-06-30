@@ -11,7 +11,8 @@ type Money int64
 
 type Transaction struct {
 	ID        uuid.UUID
-	UserID    int64
+	UserID    uuid.UUID
+	WalletID  uuid.UUID
 	Amount    Money
 	Category  string
 	CreatedAt time.Time

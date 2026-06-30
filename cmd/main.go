@@ -11,6 +11,7 @@ import (
 	"github.com/whynullname/tugrikbot/internal/postgres"
 	"github.com/whynullname/tugrikbot/internal/telegram"
 	"github.com/whynullname/tugrikbot/internal/transaction"
+	"github.com/whynullname/tugrikbot/internal/user"
 )
 
 func main() {
@@ -33,9 +34,14 @@ func main() {
 	}
 	defer pgDB.Close()
 
-	postgresRepo := transaction.NewPostgresRepository(pgDB)
-	transactionUseCase := transaction.NewUseCase(postgresRepo)
-	bot, err := telegram.NewBot(cfg.BotToken, transactionUseCase)
+	transactionRepo := transaction.NewPostgresRepository(pgDB)
+	transactionUseCase := transaction.NewUseCase(transactionRepo)
+
+	userRepo := user.NewPostgresRepository(pgDB)
+	userUseCase := user.NewUserUseCase(userRepo)
+
+	middlewares := telegram.NewMiddlewares(userUseCase)
+	bot, err := telegram.NewBot(cfg.BotToken, middlewares, transactionUseCase, userUseCase)
 	if err != nil {
 		logger.Instance.Errorf("error in initialize bot: %v\n", err)
 		return

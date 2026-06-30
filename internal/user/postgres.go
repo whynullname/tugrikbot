@@ -1,0 +1,73 @@
+package user
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/whynullname/tugrikbot/internal/domain"
+)
+
+type PostgresRepository struct {
+	db *sql.DB
+}
+
+func NewPostgresRepository(db *sql.DB) *PostgresRepository {
+	return &PostgresRepository{db: db}
+}
+
+func (p *PostgresRepository) IsUserCreated(ctx context.Context, telegramUserId int64) (bool, error) {
+	row := p.db.QueryRowContext(ctx, `SELECT id FROM users WHERE telegram_id = $1`, telegramUserId)
+
+	var id uuid.UUID
+	err := row.Scan(&id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (p *PostgresRepository) CreateUser(ctx context.Context, user *domain.User, wallet *domain.Wallet) error {
+	tx, err := p.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	_, err = tx.ExecContext(ctx, `INSERT INTO users (id, telegram_id, created_at) VALUES ($1, $2, $3)`,
+		user.ID, user.TelegramID, user.CreatedAt)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, `INSERT INTO wallets (id, title, created_at) VALUES ($1, $2, $3)`,
+		wallet.ID, wallet.Title, wallet.CreatedAt)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, `INSERT INTO wallet_members (wallet_id, user_id, created_at) VALUES ($1, $2, $3)`,
+		wallet.ID, user.ID, user.CreatedAt)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}

@@ -9,23 +9,38 @@ import (
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
+	"github.com/google/uuid"
 	"github.com/whynullname/tugrikbot/internal/domain"
 	"github.com/whynullname/tugrikbot/internal/logger"
 	"github.com/whynullname/tugrikbot/internal/transaction"
+	"github.com/whynullname/tugrikbot/internal/user"
 )
 
 type TelegramBot struct {
-	bot     *bot.Bot
-	useCase *transaction.UseCase
+	bot                *bot.Bot
+	middlewares        *Middlewares
+	transactionUseCase *transaction.UseCase
+	userUseCase        *user.UseCase
 }
 
-func NewBot(token string, useCase *transaction.UseCase) (*TelegramBot, error) {
-	telegramBot := &TelegramBot{useCase: useCase}
-	b, err := bot.New(token, bot.WithDefaultHandler(telegramBot.handler))
+func NewBot(token string, middlewares *Middlewares, useCase *transaction.UseCase, userUseCase *user.UseCase) (*TelegramBot, error) {
+	telegramBot := &TelegramBot{
+		transactionUseCase: useCase,
+		middlewares:        middlewares,
+		userUseCase:        userUseCase,
+	}
+
+	opts := []bot.Option{
+		bot.WithMiddlewares(middlewares.SaveUserId),
+		bot.WithDefaultHandler(telegramBot.handler),
+	}
+
+	b, err := bot.New(token, opts...)
 	if err != nil {
 		return nil, err
 	}
 
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/start", bot.MatchTypeExact, telegramBot.startHandler)
 	telegramBot.bot = b
 	return telegramBot, nil
 }
@@ -34,15 +49,22 @@ func (t *TelegramBot) Start(ctx context.Context) {
 	t.bot.Start(ctx)
 }
 
+func (t *TelegramBot) startHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	err := t.userUseCase.CreateUser(ctx, update.Message.From.ID)
+	if errors.Is(err, user.ErrUserAlreadyCreated) {
+		t.sendMessage(ctx, b, update, "вы уже зарегистрировались")
+		return
+	}
+
+	if errors.Is(err, user.ErrInternalWhileCreateUser) {
+		t.sendMessage(ctx, b, update, "произошла внутреняя ошибка")
+		return
+	}
+
+	t.sendMessage(ctx, b, update, "регистрация прошла успешно!")
+}
+
 func (t *TelegramBot) handler(ctx context.Context, b *bot.Bot, update *models.Update) {
-	if update.Message == nil {
-		return
-	}
-
-	if update.Message.From == nil {
-		return
-	}
-
 	messageTexts := strings.Fields(update.Message.Text)
 	if len(messageTexts) < 2 {
 		t.sendInvalidFormatMessage(ctx, b, update)
@@ -57,7 +79,8 @@ func (t *TelegramBot) handler(ctx context.Context, b *bot.Bot, update *models.Up
 	}
 
 	money := domain.Money(parsedMoney * 100)
-	tr, err := t.useCase.AddExpense(ctx, update.Message.From.ID, money, messageTexts[1])
+	//TODO: вот тут доделать
+	tr, err := t.transactionUseCase.AddExpense(ctx, uuid.Nil, uuid.Nil, money, messageTexts[1])
 	if err != nil {
 		if errors.Is(err, transaction.ErrInvalidCategory) {
 			t.sendMessage(ctx, b, update, "неизвестная категория")
