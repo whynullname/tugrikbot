@@ -14,6 +14,8 @@ type Middlewares struct {
 	userUseCase *user.UseCase
 }
 
+const StartText = "/start"
+
 func NewMiddlewares(userUseCase *user.UseCase) *Middlewares {
 	return &Middlewares{userUseCase: userUseCase}
 }
@@ -28,7 +30,7 @@ func (m *Middlewares) SaveUserId(next bot.HandlerFunc) bot.HandlerFunc {
 			return
 		}
 
-		if update.Message.Text == "/start" {
+		if update.Message.Text == StartText {
 			next(ctx, bot, update)
 			return
 		}
