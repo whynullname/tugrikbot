@@ -28,11 +28,6 @@ func (p *PostgresRepository) IsUserCreated(ctx context.Context, telegramUserId i
 			return false, nil
 		}
 
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return false, nil
-		}
-
 		return false, err
 	}
 
@@ -40,7 +35,7 @@ func (p *PostgresRepository) IsUserCreated(ctx context.Context, telegramUserId i
 }
 
 func (p *PostgresRepository) CreateUser(ctx context.Context, user *domain.User, wallet *domain.Wallet) error {
-	tx, err := p.db.Begin()
+	tx, err := p.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -54,6 +49,10 @@ func (p *PostgresRepository) CreateUser(ctx context.Context, user *domain.User, 
 	_, err = tx.ExecContext(ctx, `INSERT INTO users (id, telegram_id, created_at) VALUES ($1, $2, $3)`,
 		user.ID, user.TelegramID, user.CreatedAt)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return ErrUserAlreadyCreated
+		}
 		return err
 	}
 
@@ -70,4 +69,15 @@ func (p *PostgresRepository) CreateUser(ctx context.Context, user *domain.User, 
 	}
 
 	return tx.Commit()
+}
+
+func (p *PostgresRepository) GetUserID(ctx context.Context, telegramUserID int64) (uuid.UUID, error) {
+	row := p.db.QueryRowContext(ctx, `SELECT id FROM users WHERE telegram_id = $1`, telegramUserID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	return id, nil
 }

@@ -2,11 +2,11 @@ package telegram
 
 import (
 	"context"
+	"errors"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/whynullname/tugrikbot/internal/domain"
-	"github.com/whynullname/tugrikbot/internal/logger"
 	"github.com/whynullname/tugrikbot/internal/user"
 )
 
@@ -37,7 +37,12 @@ func (m *Middlewares) SaveUserId(next bot.HandlerFunc) bot.HandlerFunc {
 
 		userId, err := m.userUseCase.GetUserID(ctx, update.Message.From.ID)
 		if err != nil {
-			logger.Instance.Errorf("error while get user id in middleware: %v\n", err)
+			if errors.Is(err, user.ErrUserNotFound) {
+				SendMessage(ctx, bot, update, "сначала /start")
+				return
+			}
+
+			SendMessage(ctx, bot, update, "произошла внутреняя ошибка")
 			return
 		}
 

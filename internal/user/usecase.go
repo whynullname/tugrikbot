@@ -2,6 +2,8 @@ package user
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -65,5 +67,15 @@ func (u *UseCase) CreateUser(ctx context.Context, telegramUserId int64) error {
 }
 
 func (u *UseCase) GetUserID(ctx context.Context, telegramUserId int64) (uuid.UUID, error) {
-	return uuid.Nil, nil
+	id, err := u.repo.GetUserID(ctx, telegramUserId)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return uuid.Nil, ErrUserNotFound
+		}
+
+		logger.Instance.Errorf("error while get user id: %v\n", err)
+		return uuid.Nil, ErrInternalWhileGetUserID
+	}
+
+	return id, nil
 }

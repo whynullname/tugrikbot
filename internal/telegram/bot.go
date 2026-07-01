@@ -9,11 +9,11 @@ import (
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
-	"github.com/google/uuid"
 	"github.com/whynullname/tugrikbot/internal/domain"
 	"github.com/whynullname/tugrikbot/internal/logger"
 	"github.com/whynullname/tugrikbot/internal/transaction"
 	"github.com/whynullname/tugrikbot/internal/user"
+	"github.com/whynullname/tugrikbot/internal/wallet"
 )
 
 type TelegramBot struct {
@@ -21,13 +21,18 @@ type TelegramBot struct {
 	middlewares        *Middlewares
 	transactionUseCase *transaction.UseCase
 	userUseCase        *user.UseCase
+	walletUseCase      *wallet.UseCase
 }
 
-func NewBot(token string, middlewares *Middlewares, useCase *transaction.UseCase, userUseCase *user.UseCase) (*TelegramBot, error) {
+func NewBot(token string, middlewares *Middlewares,
+	transactionUseCase *transaction.UseCase, userUseCase *user.UseCase,
+	walletUseCase *wallet.UseCase) (*TelegramBot, error) {
+
 	telegramBot := &TelegramBot{
-		transactionUseCase: useCase,
+		transactionUseCase: transactionUseCase,
 		middlewares:        middlewares,
 		userUseCase:        userUseCase,
+		walletUseCase:      walletUseCase,
 	}
 
 	opts := []bot.Option{
@@ -52,16 +57,16 @@ func (t *TelegramBot) Start(ctx context.Context) {
 func (t *TelegramBot) startHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	err := t.userUseCase.CreateUser(ctx, update.Message.From.ID)
 	if errors.Is(err, user.ErrUserAlreadyCreated) {
-		t.sendMessage(ctx, b, update, "вы уже зарегистрировались")
+		SendMessage(ctx, b, update, "вы уже зарегистрировались")
 		return
 	}
 
 	if errors.Is(err, user.ErrInternalWhileCreateUser) {
-		t.sendMessage(ctx, b, update, "произошла внутреняя ошибка")
+		SendMessage(ctx, b, update, "произошла внутреняя ошибка")
 		return
 	}
 
-	t.sendMessage(ctx, b, update, "регистрация прошла успешно!")
+	SendMessage(ctx, b, update, "регистрация прошла успешно!")
 }
 
 func (t *TelegramBot) handler(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -79,38 +84,44 @@ func (t *TelegramBot) handler(ctx context.Context, b *bot.Bot, update *models.Up
 	}
 
 	money := domain.Money(parsedMoney * 100)
-	//TODO: вот тут доделать
-	tr, err := t.transactionUseCase.AddExpense(ctx, uuid.Nil, uuid.Nil, money, messageTexts[1])
+	userID := domain.GetUserIDByContext(ctx)
+	walletID, err := t.walletUseCase.GetUserWalletID(ctx, userID)
+	if err != nil {
+		SendMessage(ctx, b, update, "произошла системная ошибка")
+		return
+	}
+
+	tr, err := t.transactionUseCase.AddExpense(ctx, userID, walletID, money, messageTexts[1])
 	if err != nil {
 		if errors.Is(err, transaction.ErrInvalidCategory) {
-			t.sendMessage(ctx, b, update, "неизвестная категория")
+			SendMessage(ctx, b, update, "неизвестная категория")
 			return
 		}
 
 		if errors.Is(err, transaction.ErrAmountIsZero) {
-			t.sendMessage(ctx, b, update, "потрачено должно быть больше 0")
+			SendMessage(ctx, b, update, "потрачено должно быть больше 0")
 			return
 		}
 
 		if errors.Is(err, transaction.ErrInternalWhileCreateTransaction) {
-			t.sendMessage(ctx, b, update, "произошла системная ошибка при добавлении траты")
+			SendMessage(ctx, b, update, "произошла системная ошибка при добавлении траты")
 			return
 		}
 
 		logger.Instance.Errorf("internal error: %v\n", err)
-		t.sendMessage(ctx, b, update, "произошла системная ошибка при добавлении траты")
+		SendMessage(ctx, b, update, "произошла системная ошибка при добавлении траты")
 		return
 	}
 
 	outputMessage := fmt.Sprintf("Записал %s на %s", tr.Amount, tr.Category)
-	t.sendMessage(ctx, b, update, outputMessage)
+	SendMessage(ctx, b, update, outputMessage)
 }
 
 func (t *TelegramBot) sendInvalidFormatMessage(ctx context.Context, b *bot.Bot, update *models.Update) {
-	t.sendMessage(ctx, b, update, "не верный формат")
+	SendMessage(ctx, b, update, "не верный формат")
 }
 
-func (t *TelegramBot) sendMessage(ctx context.Context, b *bot.Bot, update *models.Update, message string) {
+func SendMessage(ctx context.Context, b *bot.Bot, update *models.Update, message string) {
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   message,

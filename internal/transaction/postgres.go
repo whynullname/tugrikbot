@@ -16,7 +16,7 @@ func NewPostgresRepository(db *sql.DB) *PostgresRepository {
 }
 
 func (p *PostgresRepository) Save(ctx context.Context, transaction *domain.Transaction) error {
-	_, err := p.db.ExecContext(ctx, `INSERT INTO transactions (id, user_id, wallet_id amount, category, created_at)
+	_, err := p.db.ExecContext(ctx, `INSERT INTO transactions (id, user_id, wallet_id, amount, category, created_at)
 							VALUES ($1, $2, $3, $4, $5, $6)`,
 		transaction.ID, transaction.UserID, transaction.WalletID,
 		transaction.Amount, transaction.Category, transaction.CreatedAt)
