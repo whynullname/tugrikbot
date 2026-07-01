@@ -16,6 +16,7 @@ type Transaction struct {
 	Amount    Money
 	Category  string
 	CreatedAt time.Time
+	UpdateID  int64
 }
 
 var allowedCategory = []string{"еда", "транспорт", "развлечения", "жилье", "прочее"}

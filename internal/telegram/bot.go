@@ -91,8 +91,13 @@ func (t *TelegramBot) handler(ctx context.Context, b *bot.Bot, update *models.Up
 		return
 	}
 
-	tr, err := t.transactionUseCase.AddExpense(ctx, userID, walletID, money, messageTexts[1])
+	tr, err := t.transactionUseCase.AddExpense(ctx, userID, walletID, update.ID, money, messageTexts[1])
 	if err != nil {
+		if errors.Is(err, transaction.ErrTransactionAlreadyCreated) {
+			SendMessage(ctx, b, update, "транзакция уже добавлена")
+			return
+		}
+
 		if errors.Is(err, transaction.ErrInvalidCategory) {
 			SendMessage(ctx, b, update, "неизвестная категория")
 			return
