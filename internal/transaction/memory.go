@@ -4,16 +4,17 @@ import (
 	"context"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/whynullname/tugrikbot/internal/domain"
 )
 
 type InMemoryRepository struct {
 	mutex        sync.Mutex
-	transactions map[int64][]domain.Transaction
+	transactions map[uuid.UUID][]domain.Transaction
 }
 
 func NewInMemoryRepository() *InMemoryRepository {
-	return &InMemoryRepository{transactions: make(map[int64][]domain.Transaction)}
+	return &InMemoryRepository{transactions: make(map[uuid.UUID][]domain.Transaction)}
 }
 
 func (i *InMemoryRepository) Save(ctx context.Context, transaction *domain.Transaction) error {

@@ -12,20 +12,40 @@ import (
 	"github.com/whynullname/tugrikbot/internal/domain"
 	"github.com/whynullname/tugrikbot/internal/logger"
 	"github.com/whynullname/tugrikbot/internal/transaction"
+	"github.com/whynullname/tugrikbot/internal/user"
+	"github.com/whynullname/tugrikbot/internal/wallet"
 )
 
 type TelegramBot struct {
-	bot     *bot.Bot
-	useCase *transaction.UseCase
+	bot                *bot.Bot
+	middlewares        *Middlewares
+	transactionUseCase *transaction.UseCase
+	userUseCase        *user.UseCase
+	walletUseCase      *wallet.UseCase
 }
 
-func NewBot(token string, useCase *transaction.UseCase) (*TelegramBot, error) {
-	telegramBot := &TelegramBot{useCase: useCase}
-	b, err := bot.New(token, bot.WithDefaultHandler(telegramBot.handler))
+func NewBot(token string, middlewares *Middlewares,
+	transactionUseCase *transaction.UseCase, userUseCase *user.UseCase,
+	walletUseCase *wallet.UseCase) (*TelegramBot, error) {
+
+	telegramBot := &TelegramBot{
+		transactionUseCase: transactionUseCase,
+		middlewares:        middlewares,
+		userUseCase:        userUseCase,
+		walletUseCase:      walletUseCase,
+	}
+
+	opts := []bot.Option{
+		bot.WithMiddlewares(middlewares.SaveUserId),
+		bot.WithDefaultHandler(telegramBot.handler),
+	}
+
+	b, err := bot.New(token, opts...)
 	if err != nil {
 		return nil, err
 	}
 
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/start", bot.MatchTypeExact, telegramBot.startHandler)
 	telegramBot.bot = b
 	return telegramBot, nil
 }
@@ -34,15 +54,22 @@ func (t *TelegramBot) Start(ctx context.Context) {
 	t.bot.Start(ctx)
 }
 
+func (t *TelegramBot) startHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	err := t.userUseCase.CreateUser(ctx, update.Message.From.ID)
+	if errors.Is(err, user.ErrUserAlreadyCreated) {
+		SendMessage(ctx, b, update, "вы уже зарегистрировались")
+		return
+	}
+
+	if errors.Is(err, user.ErrInternalWhileCreateUser) {
+		SendMessage(ctx, b, update, "произошла внутреняя ошибка")
+		return
+	}
+
+	SendMessage(ctx, b, update, "регистрация прошла успешно!")
+}
+
 func (t *TelegramBot) handler(ctx context.Context, b *bot.Bot, update *models.Update) {
-	if update.Message == nil {
-		return
-	}
-
-	if update.Message.From == nil {
-		return
-	}
-
 	messageTexts := strings.Fields(update.Message.Text)
 	if len(messageTexts) < 2 {
 		t.sendInvalidFormatMessage(ctx, b, update)
@@ -57,37 +84,44 @@ func (t *TelegramBot) handler(ctx context.Context, b *bot.Bot, update *models.Up
 	}
 
 	money := domain.Money(parsedMoney * 100)
-	tr, err := t.useCase.AddExpense(ctx, update.Message.From.ID, money, messageTexts[1])
+	userID := domain.GetUserIDByContext(ctx)
+	walletID, err := t.walletUseCase.GetUserWalletID(ctx, userID)
+	if err != nil {
+		SendMessage(ctx, b, update, "произошла системная ошибка")
+		return
+	}
+
+	tr, err := t.transactionUseCase.AddExpense(ctx, userID, walletID, money, messageTexts[1])
 	if err != nil {
 		if errors.Is(err, transaction.ErrInvalidCategory) {
-			t.sendMessage(ctx, b, update, "неизвестная категория")
+			SendMessage(ctx, b, update, "неизвестная категория")
 			return
 		}
 
 		if errors.Is(err, transaction.ErrAmountIsZero) {
-			t.sendMessage(ctx, b, update, "потрачено должно быть больше 0")
+			SendMessage(ctx, b, update, "потрачено должно быть больше 0")
 			return
 		}
 
 		if errors.Is(err, transaction.ErrInternalWhileCreateTransaction) {
-			t.sendMessage(ctx, b, update, "произошла системная ошибка при добавлении траты")
+			SendMessage(ctx, b, update, "произошла системная ошибка при добавлении траты")
 			return
 		}
 
 		logger.Instance.Errorf("internal error: %v\n", err)
-		t.sendMessage(ctx, b, update, "произошла системная ошибка при добавлении траты")
+		SendMessage(ctx, b, update, "произошла системная ошибка при добавлении траты")
 		return
 	}
 
 	outputMessage := fmt.Sprintf("Записал %s на %s", tr.Amount, tr.Category)
-	t.sendMessage(ctx, b, update, outputMessage)
+	SendMessage(ctx, b, update, outputMessage)
 }
 
 func (t *TelegramBot) sendInvalidFormatMessage(ctx context.Context, b *bot.Bot, update *models.Update) {
-	t.sendMessage(ctx, b, update, "не верный формат")
+	SendMessage(ctx, b, update, "не верный формат")
 }
 
-func (t *TelegramBot) sendMessage(ctx context.Context, b *bot.Bot, update *models.Update, message string) {
+func SendMessage(ctx context.Context, b *bot.Bot, update *models.Update, message string) {
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   message,

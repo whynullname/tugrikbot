@@ -17,7 +17,9 @@ func NewUseCase(repo Repository) *UseCase {
 	return &UseCase{repo: repo}
 }
 
-func (u *UseCase) AddExpense(ctx context.Context, userID int64, amount domain.Money, category string) (*domain.Transaction, error) {
+func (u *UseCase) AddExpense(ctx context.Context, userID uuid.UUID, walletID uuid.UUID,
+	amount domain.Money, category string) (*domain.Transaction, error) {
+
 	if amount <= 0 {
 		return nil, ErrAmountIsZero
 	}
@@ -35,6 +37,7 @@ func (u *UseCase) AddExpense(ctx context.Context, userID int64, amount domain.Mo
 	transaction := &domain.Transaction{
 		ID:        transactionId,
 		UserID:    userID,
+		WalletID:  walletID,
 		Amount:    amount,
 		Category:  category,
 		CreatedAt: time.Now(),
