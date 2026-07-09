@@ -68,6 +68,12 @@ func (p *PostgresRepository) CreateUser(ctx context.Context, user *domain.User, 
 		return err
 	}
 
+	_, err = tx.ExecContext(ctx, `INSERT INTO users_settings (user_id, active_wallet_id, personal_wallet_id) VALUES ($1, $2, $3)`,
+		user.ID, wallet.ID, wallet.ID)
+	if err != nil {
+		return err
+	}
+
 	err = tx.Commit()
 	if err != nil {
 		return err

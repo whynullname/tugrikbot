@@ -50,11 +50,18 @@ func (u *UseCase) CreateUser(ctx context.Context, telegramUserId int64) error {
 		CreatedAt:  currentTime,
 	}
 
+	walletInviteCode, err := uuid.NewRandom()
+	if err != nil {
+		logger.Instance.Errorf("error while create uuid for wallet invite code: %v\n", err)
+		return ErrInternalWhileCreateUser
+	}
+
 	walletTitle := fmt.Sprintf("personal_wallet_%d", telegramUserId)
 	wallet := &domain.Wallet{
-		ID:        walletID,
-		Title:     walletTitle,
-		CreatedAt: currentTime,
+		ID:         walletID,
+		Title:      walletTitle,
+		CreatedAt:  currentTime,
+		InviteCode: walletInviteCode,
 	}
 
 	err = u.repo.CreateUser(ctx, user, wallet)

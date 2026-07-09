@@ -45,7 +45,8 @@ func NewBot(token string, middlewares *Middlewares,
 		return nil, err
 	}
 
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/start", bot.MatchTypeExact, telegramBot.startHandler)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "start", bot.MatchTypeCommandStartOnly, telegramBot.startHandler)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "newwallet", bot.MatchTypeCommandStartOnly, telegramBot.newWalletHandler)
 	telegramBot.bot = b
 	return telegramBot, nil
 }
@@ -67,6 +68,31 @@ func (t *TelegramBot) startHandler(ctx context.Context, b *bot.Bot, update *mode
 	}
 
 	SendMessage(ctx, b, update, "регистрация прошла успешно!")
+}
+
+func (t *TelegramBot) newWalletHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	userID := domain.GetUserIDByContext(ctx)
+	messageTexts := strings.Fields(update.Message.Text)
+	if len(messageTexts) < 2 {
+		SendMessage(ctx, b, update, "введите имя кошелька")
+		return
+	}
+
+	walletTitle := strings.Join(messageTexts[1:], " ")
+	inviteCode, err := t.walletUseCase.CreateNewWallet(ctx, userID, walletTitle)
+	if err != nil {
+		if errors.Is(err, wallet.ErrInternalWhileCreateNewWallet) {
+			SendMessage(ctx, b, update, "произошла системная ошибка при создании кошелька")
+			return
+		}
+
+		SendMessage(ctx, b, update, "произошла внутреняя ошибка")
+		return
+	}
+
+	outputMessage := fmt.Sprintf("Кошелек успешно создан, ключ для приглашения: %s", inviteCode)
+	SendMessage(ctx, b, update, outputMessage)
+
 }
 
 func (t *TelegramBot) handler(ctx context.Context, b *bot.Bot, update *models.Update) {
