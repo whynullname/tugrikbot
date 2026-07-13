@@ -102,7 +102,7 @@ func (p *PostgresRepository) JoinToWallet(ctx context.Context, userID uuid.UUID,
 
 func (p *PostgresRepository) GetUserWallets(ctx context.Context, userID uuid.UUID) ([]domain.WalletInfo, error) {
 	rows, err := p.db.QueryContext(ctx, `
-		SELECT w.title, w.id, COALESCE(w.id = us.active_wallet_id) AS is_active
+		SELECT w.title, w.id, COALESCE(w.id = us.active_wallet_id, false) AS is_active
 		FROM wallets AS w
 		JOIN wallet_members AS wm ON w.id = wm.wallet_id
 		JOIN users_settings AS us ON us.user_id = wm.user_id
