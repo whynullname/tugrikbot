@@ -56,19 +56,30 @@ func (p *PostgresRepository) CreateUser(ctx context.Context, user *domain.User, 
 		return err
 	}
 
-	_, err = tx.ExecContext(ctx, `INSERT INTO wallets (id, title, created_at) VALUES ($1, $2, $3)`,
-		wallet.ID, wallet.Title, wallet.CreatedAt)
+	_, err = tx.ExecContext(ctx, `INSERT INTO wallets (id, title, created_at, invite_code) VALUES ($1, $2, $3, $4)`,
+		wallet.ID, wallet.Title, wallet.CreatedAt, wallet.InviteCode)
 	if err != nil {
 		return err
 	}
 
-	_, err = tx.ExecContext(ctx, `INSERT INTO wallet_members (wallet_id, user_id, created_at) VALUES ($1, $2, $3)`,
-		wallet.ID, user.ID, user.CreatedAt)
+	_, err = tx.ExecContext(ctx, `INSERT INTO wallet_members (wallet_id, user_id, created_at, role) VALUES ($1, $2, $3, $4)`,
+		wallet.ID, user.ID, user.CreatedAt, domain.OwnerWalletRole)
 	if err != nil {
 		return err
 	}
 
-	return tx.Commit()
+	_, err = tx.ExecContext(ctx, `INSERT INTO users_settings (user_id, active_wallet_id, personal_wallet_id) VALUES ($1, $2, $3)`,
+		user.ID, wallet.ID, wallet.ID)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (p *PostgresRepository) GetUserID(ctx context.Context, telegramUserID int64) (uuid.UUID, error) {
