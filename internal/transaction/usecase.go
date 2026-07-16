@@ -18,15 +18,16 @@ func NewUseCase(repo Repository) *UseCase {
 	return &UseCase{repo: repo}
 }
 
-func (u *UseCase) AddExpense(ctx context.Context, userID uuid.UUID,
+func (u *UseCase) AddTransaction(ctx context.Context, userID uuid.UUID,
 	walletID uuid.UUID, updateID int64,
-	amount domain.Money, category string) (*domain.Transaction, error) {
+	amount domain.Money, category string,
+	transactionType domain.TransactionType) (*domain.Transaction, error) {
 
 	if amount <= 0 {
 		return nil, ErrAmountIsZero
 	}
 
-	if !domain.IsValidCategory(category) {
+	if !domain.IsValidCategory(category, transactionType) {
 		return nil, ErrInvalidCategory
 	}
 
@@ -44,6 +45,7 @@ func (u *UseCase) AddExpense(ctx context.Context, userID uuid.UUID,
 		Category:  category,
 		CreatedAt: time.Now(),
 		UpdateID:  updateID,
+		Type:      transactionType,
 	}
 
 	err = u.repo.Save(ctx, transaction)
@@ -57,4 +59,15 @@ func (u *UseCase) AddExpense(ctx context.Context, userID uuid.UUID,
 	}
 
 	return transaction, nil
+}
+
+func (u *UseCase) GetWalletBalance(ctx context.Context, walletID uuid.UUID) (domain.Money, error) {
+	money, err := u.repo.GetWalletBalance(ctx, walletID)
+
+	if err != nil {
+		logger.Instance.Errorf("error while get wallet balance: %v\n", err)
+		return 0, ErrInternalWhileGetWalletBalance
+	}
+
+	return money, nil
 }
