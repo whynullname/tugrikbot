@@ -2,31 +2,44 @@ package domain
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 type Money int64
+type TransactionType string
+
+const (
+	Expense TransactionType = "expense"
+	Income  TransactionType = "income"
+)
 
 type Transaction struct {
 	ID        uuid.UUID
-	UserID    int64
+	UserID    uuid.UUID
+	WalletID  uuid.UUID
 	Amount    Money
 	Category  string
 	CreatedAt time.Time
+	UpdateID  int64
+	Type      TransactionType
 }
 
-var allowedCategory = []string{"еда", "транспорт", "развлечения", "жилье", "прочее"}
+var allowedExpenseCategory = []string{"еда", "транспорт", "развлечения", "жилье", "прочее"}
+var allowedIncomeCategory = []string{"аванс", "зарплата", "прочее"}
 
-func IsValidCategory(category string) bool {
-	for _, validCategory := range allowedCategory {
-		if validCategory == category {
-			return true
-		}
+func IsValidCategory(category string, transactionType TransactionType) bool {
+	var categories []string
+
+	if transactionType == Expense {
+		categories = allowedExpenseCategory
+	} else {
+		categories = allowedIncomeCategory
 	}
 
-	return false
+	return slices.Contains(categories, category)
 }
 
 func (m Money) String() string {
